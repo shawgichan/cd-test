@@ -1,0 +1,62 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # --- CI: TESTING STAGE ---
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Run tests
+        run: |
+          go test -v ./...
+          go build -o app/main ./cmd/main.go  # Build to verify compilation
+
+  # --- CD: DEPLOYMENT STAGE (runs only on push to main) ---
+  deploy:
+    needs: test  # Waits for tests to pass
+    if: github.ref == 'refs/heads/main'  # Only deploy on main branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Validate SSH access
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "✅ Connected to $(hostname)"
+            docker --version
+
+      - name: Deploy using Docker Compose
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/cd-test
+            git pull origin main || true  # Sync latest changes
+            docker compose down myapp || true  # Explicitly target your service
+            docker compose build myapp --no-cache
+            docker compose up -d myapp
+            docker logs myapp_8000 --tail 50  # Verify logs
+
+      - name: Verify deployment
+        run: |
+          curl -sSf --retry 3 --max-time 5 \
+            http://${{ secrets.VPS_HOST }}:8000/health
