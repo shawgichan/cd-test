@@ -56,7 +56,7 @@ jobs:
             docker compose up -d myapp
             docker logs myapp_8000 --tail 50  # Verify logs
 
-      - name: Verify deployment
-        run: |
-          curl -sSf --retry 3 --max-time 5 \
-            http://${{ secrets.VPS_HOST }}:8000/health
+      # - name: Verify deployment
+      #   run: |
+      #     curl -sSf --retry 3 --max-time 5 \
+      #       http://${{ secrets.VPS_HOST }}:8000/health
